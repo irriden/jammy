@@ -1,0 +1,12 @@
+[package]
+name = "jammy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bitcoin_hashes = "0.14.0"
+fedimint-tonic-lnd = { version = "0.2.0", default-features = false, features = ["lightningrpc", "routerrpc", "invoicesrpc"], path = "tonic_lnd" }
+futures = "0.3.30"
+hex = "0.4.3"
+rand = "0.8.5"
+tokio = { version = "1.37.0", features = ["rt-multi-thread"] }
