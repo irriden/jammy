@@ -1,4 +1,4 @@
-apt install protobuf-compiler cargo git
+apt install protobuf-compiler rustup git
 ./connect_nodes.sh 2> /dev/null
 ./fund.sh
 git clone https://github.com/irriden/jammy.git
