@@ -36,6 +36,7 @@ async fn main() {
         .unwrap(),
     );
 
+    /*
     let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
     alice
         .open_channel(String::from(TARGET), 16_000_000, 0)
@@ -45,23 +46,17 @@ async fn main() {
     }
     println!("Please confirm the channels!");
     std::io::stdin().read_line(&mut String::new()).unwrap();
+    */
 
     let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
-    let alice_channel_ids = alice.list_channel_ids().await;
-    assert_eq!(alice_channel_ids.len(), target_peers.len());
 
     let mut tasks = Vec::new();
-    for (channel_id, peer) in alice_channel_ids.iter().zip(target_peers.iter()) {
+    for peer in target_peers.iter() {
         let task = async move {
             let mut i = 1;
             loop {
                 println!("{}", i);
-                let amount = if i % 20 == 0 {
-                    println!("BIG PPAAAAYDAYY!!");
-                    100_000
-                } else {
-                    100_000
-                };
+                let amount = 100_000;
                 i += 1;
                 let mut alice = Client(
                     fedimint_tonic_lnd::connect(
@@ -88,7 +83,7 @@ async fn main() {
                     .send_payment(
                         invoice.to_string(),
                         1,
-                        Some(vec![*channel_id]),
+                        None,
                         Some(hex::decode(peer).unwrap()),
                     )
                     .await;
@@ -110,17 +105,12 @@ async fn main() {
     sleep(Duration::from_secs(5)).await;
 
     let mut tasks = Vec::new();
-    for (channel_id, peer) in alice_channel_ids.iter().zip(target_peers.iter()) {
+    for peer in target_peers.iter() {
         let task = async move {
             let mut i = 1;
             loop {
                 println!("{}", i);
-                let amount = if i % 20 == 0 {
-                    println!("BIG PPAAAAYDAYY!!");
-                    100_000
-                } else {
-                    100_000
-                };
+                let amount = 100_000;
                 i += 1;
                 let mut alice = Client(
                     fedimint_tonic_lnd::connect(
@@ -148,7 +138,7 @@ async fn main() {
                     .send_payment(
                         invoice.to_string(),
                         1,
-                        Some(vec![*channel_id]),
+                        None,
                         Some(hex::decode(peer).unwrap()),
                     )
                     .await;
@@ -157,7 +147,7 @@ async fn main() {
                 // prints whether the inbound htlcs to pay that invoice were endorsed
                 let endorsed = bob.lookup_invoice(hash.to_vec()).await;
                 bob.cancel_invoice(hash.to_vec()).await;
-                println!("settled invoice: {}", hex::encode(hash));
+                println!("cancelled invoice: {}", hex::encode(hash));
                 if endorsed {
                     //break;
                 }
