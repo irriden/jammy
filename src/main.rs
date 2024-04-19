@@ -87,16 +87,16 @@ async fn main() {
     let hash_table = client::gen_hash_table(10);
     for (i, (_preimage, payment_hash)) in hash_table.iter().enumerate() {
         let invoice = bob.add_hold_invoice(payment_hash.to_vec(), 1000).await;
-        println!("Bob added invoice {}", i + 1);
+        // println!("Bob added invoice {}", i + 1);
         // get invoice subscription before payment to avoid missing it.
         // let b_stream = bob.get_invoice_subscription().await;
 
-        println!("Alice -> Bob payment attempt {}", i + 1);
+        // println!("Alice -> Bob payment attempt {}", i + 1);
         let ab_stream = alice
             .send_payment(invoice.payment_request.to_string())
             .await;
 
-        println!("Bob waiting for invoice accept {}", i + 1);
+        // println!("Bob waiting for invoice accept {}", i + 1);
         // bob.await_invoice_accepted(b_stream, payment_hash.to_vec())
         //     .await;
         bob.poll_invoice(payment_hash.to_vec()).await;
@@ -109,7 +109,7 @@ async fn main() {
                 ab_stream,
                 Arc::new(|payment| {
                     if payment.status == 3 {
-                        // println!("Alice -> Bob payment failed!");
+                        println!("Alice -> Bob payment failed!");
                     }
                 }),
             )
