@@ -39,39 +39,22 @@ async fn main() {
     let front_peer = &target_peers[0];
     let back_peer = &target_peers[1];
 
-    // have two front-attackers (A & C) open channels to the target
-    attack::open_to_targets(&mut alice, vec![front_peer.clone()])
-        .await
-        .unwrap();
+    // // have two front-attackers (A & C) open channels to the target
+    // attack::open_to_targets(&mut alice, vec![front_peer.clone()])
+    //     .await
+    //     .unwrap();
 
-    // The back-attacker (B) opens a channel to the third target
-    attack::open_to_targets(&mut bob, vec![back_peer.clone()])
-        .await
-        .unwrap();
+    // // The back-attacker (B) opens a channel to the third target
+    // attack::open_to_targets(&mut bob, vec![back_peer.clone()])
+    //     .await
+    //     .unwrap();
 
-    attack::open_to_targets(&mut charlie, vec![TARGET.to_string()])
-        .await
-        .unwrap();
+    // attack::open_to_targets(&mut charlie, vec![TARGET.to_string()])
+    //     .await
+    //     .unwrap();
 
-    println!("Please confirm the channels!");
-    std::io::stdin().read_line(&mut String::new()).unwrap();
-
-    // let hash_table = client::gen_hash_table(10);
-
-    // // 1. Alice pays Charlie successfully several times
-    // for (i, (preimage, hash)) in hash_table.iter().enumerate() {
-    //     println!("generating invoice...");
-    //     let invoice = charlie.add_hold_invoice(hash.to_vec(), 1000).await;
-    //     println!("sending payment...");
-    //     alice.send_payment(invoice.to_string()).await;
-    //     println!("payment sent! settling invoice...");
-
-    //     charlie.lookup_invoice(hash.to_vec()).await;
-    //     charlie.settle_invoice(preimage.to_vec()).await;
-    //     // prints whether the inbound htlcs to pay that invoice were endorsed
-    //     bob.lookup_invoice(hash.to_vec()).await;
-    //     println!("settled invoice: {}, {}", i, hex::encode(hash));
-    // }
+    // println!("Please confirm the channels!");
+    // std::io::stdin().read_line(&mut String::new()).unwrap();
 
     for _ in 0..100 {
         let invoice = charlie.add_invoice(800_000).await;
