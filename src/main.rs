@@ -154,20 +154,26 @@ async fn main() {
             .await;
     }
 
-    // 3. Charlie sends payment to route[front-peer, target, back-peer] to check reputation
+    // 3. Charlie sends payment to route[front-peer, target, back-peer, Bob] to check reputation
     let charlie_front_peer_channel = &charlie.get_channels_for_peer(front_peer.clone()).await[0];
     println!("Charlie -> [front-peer, target, back-peer] payment");
-    bob.subscribe_invoices().await;
-    for _ in 0..10 {
-        let b_invoice = bob.add_invoice(50_000).await;
+    let hash_table_2 = client::gen_hash_table(10);
+    for (i, (preimage, payment_hash)) in hash_table_2.iter().enumerate() {
+        let b_invoice = bob.add_hold_invoice(payment_hash.to_vec(), 50_000).await;
 
         let c_stream = charlie
             .send_payment(
-                b_invoice.to_string(),
+                b_invoice.payment_request.to_string(),
                 1,
                 Some(vec![charlie_front_peer_channel.chan_id]),
                 Some(client::decode_hex(&back_peer)),
             )
             .await;
+
+        bob.poll_invoice(payment_hash.to_vec()).await;
+
+        bob.lookup_invoice(payment_hash.to_vec()).await;
+
+        bob.settle_invoice(preimage.to_vec()).await;
     }
 }
