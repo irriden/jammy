@@ -41,6 +41,7 @@ async fn main() {
         .open_channel(String::from(TARGET), 16_000_000, 0)
         .await;
     for peer in target_peers.iter() {
+        println!("{}", peer);
         bob.open_channel(peer.clone(), 16_000_000, 8_000_000).await;
     }
     println!("Please confirm the channels!");
@@ -106,9 +107,10 @@ async fn main() {
     for peer in target_peers.iter() {
         let task = async move {
             let mut i = 1;
+            let mut amount = 100_000;
+            let mut hold = false;
             loop {
                 println!("{}", i);
-                let amount = 100_000;
                 i += 1;
                 let mut alice = Client(
                     fedimint_tonic_lnd::connect(
@@ -141,9 +143,26 @@ async fn main() {
                     )
                     .await;
                 println!("payment sent! settling invoice...");
-                sleep(Duration::from_secs(120)).await;
+                println!("AMOUNT: {}", amount);
+                println!("HOLD: {}", hold);
+                if hold {
+                    sleep(Duration::from_secs(80)).await;
+                } else {
+                    sleep(Duration::from_secs(20)).await;
+                }
                 // prints whether the inbound htlcs to pay that invoice were endorsed
                 let endorsed = bob.lookup_invoice(hash.to_vec()).await;
+                let state = bob.lookup_invoice_state(hash.to_vec()).await;
+                if state == 0 {
+                    println!("payment did not make it!");
+                    hold = true;
+                    amount -= 100_000;
+                } else if state == 3 {
+                    println!("payment DID make it!");
+                }
+                if !hold {
+                    amount += 100_000
+                }
                 bob.cancel_invoice(hash.to_vec()).await;
                 println!("cancelled invoice: {}", hex::encode(hash));
                 if endorsed {
@@ -347,6 +366,20 @@ impl Client {
             }
         }
         htlcs.iter().all(|htlc| htlc.incoming_endorsed)
+    }
+
+    async fn lookup_invoice_state(&mut self, r_hash: Vec<u8>) -> i32 {
+        self
+            .0
+            .lightning()
+            .lookup_invoice(fedimint_tonic_lnd::lnrpc::PaymentHash {
+                r_hash,
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .state
     }
 
     async fn connect_peer(&mut self, pubkey: String, host: String) {
