@@ -5,4 +5,5 @@ git clone https://github.com/irriden/jammy.git
 cd jammy
 git clone --branch attackathon https://github.com/carlaKC/lnd.git
 export LND_REPO_DIR=/jammy/lnd
+rustup default stable
 cargo run
