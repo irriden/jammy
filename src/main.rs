@@ -89,7 +89,7 @@ async fn main() {
         let invoice = bob.add_hold_invoice(payment_hash.to_vec(), 1000).await;
         println!("Bob added invoice {}", i + 1);
         // get invoice subscription before payment to avoid missing it.
-        let b_stream = bob.get_invoice_subscription().await;
+        // let b_stream = bob.get_invoice_subscription().await;
 
         println!("Alice -> Bob payment attempt {}", i + 1);
         let ab_stream = alice
