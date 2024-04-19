@@ -18,10 +18,7 @@ const LND_2_RPCSERVER: &str = env!("LND_2_RPCSERVER");
 const LND_2_CERT: &str = env!("LND_2_CERT");
 const LND_2_MACAROON: &str = env!("LND_2_MACAROON");
 
-const _TARGET: &str = env!("TARGET");
-
-const BFX_LND0: &str = "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025";
-const KENDIG: &str = "02c2fab8d99106ce621cae6d35aaddcc5a13f6ae9c65f2c9cf2adc6570dc08482d";
+const TARGET: &str = env!("TARGET");
 
 #[tokio::main]
 async fn main() {
@@ -36,17 +33,22 @@ async fn main() {
         .await
         .unwrap();
 
+    let target_peers = alice.graph_get_node_peers(TARGET.to_string()).await;
+
+    let front_peer = &target_peers[0];
+    let back_peer = &target_peers[1];
+
     // have two front-attackers (A & C) open channels to the target
-    attack::open_to_targets(&mut alice, vec![BFX_LND0.to_string()])
+    attack::open_to_targets(&mut alice, vec![front_peer.clone()])
         .await
         .unwrap();
 
-    attack::open_to_targets(&mut charlie, vec![BFX_LND0.to_string()])
+    attack::open_to_targets(&mut charlie, vec![front_peer.clone()])
         .await
         .unwrap();
 
     // The back-attacker (B) opens a channel to the third target
-    attack::open_to_targets(&mut bob, vec![KENDIG.to_string()])
+    attack::open_to_targets(&mut bob, vec![back_peer.clone()])
         .await
         .unwrap();
 
