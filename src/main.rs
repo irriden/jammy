@@ -171,6 +171,7 @@ async fn main() {
             )
             .await;
 
+        println!("polling for invoice {}", i + 1);
         bob.poll_invoice(payment_hash.to_vec()).await;
 
         bob.lookup_invoice(payment_hash.to_vec()).await;
