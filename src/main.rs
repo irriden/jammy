@@ -147,7 +147,7 @@ async fn main() {
                 ab_stream,
                 Arc::new(|payment| {
                     if payment.status == 3 {
-                        println!("Alice -> Bob payment failed!");
+                        // println!("Alice -> Bob payment failed!");
                     }
                 }),
             )
@@ -171,7 +171,11 @@ async fn main() {
             )
             .await;
 
-        println!("polling for invoice {}", i + 1);
+        println!(
+            "polling for invoice {}: {}",
+            i + 1,
+            b_invoice.payment_request
+        );
         bob.poll_invoice(payment_hash.to_vec()).await;
 
         bob.lookup_invoice(payment_hash.to_vec()).await;

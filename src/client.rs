@@ -310,7 +310,7 @@ impl Client {
             .await
             .unwrap()
             .into_inner();
-        println!("attempt to cancel invoice: {:?}", res);
+        // println!("attempt to cancel invoice: {:?}", res);
     }
 }
 
