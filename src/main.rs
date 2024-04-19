@@ -18,7 +18,7 @@ const LND_2_RPCSERVER: &str = env!("LND_2_RPCSERVER");
 const LND_2_CERT: &str = env!("LND_2_CERT");
 const LND_2_MACAROON: &str = env!("LND_2_MACAROON");
 
-const TARGET: &str = env!("TARGET");
+const _TARGET: &str = env!("TARGET");
 
 const BFX_LND0: &str = "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025";
 const KENDIG: &str = "02c2fab8d99106ce621cae6d35aaddcc5a13f6ae9c65f2c9cf2adc6570dc08482d";
