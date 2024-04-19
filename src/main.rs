@@ -85,7 +85,7 @@ async fn main() {
     // 2. Alice sends payments to Bob and fails them to destroy Target's reputation for P1<->P2
     println!("10x Alice -> Bob failed payments");
     let hash_table = client::gen_hash_table(10);
-    for (i, (preimage, payment_hash)) in hash_table.iter().enumerate() {
+    for (i, (_preimage, payment_hash)) in hash_table.iter().enumerate() {
         let invoice = bob.add_hold_invoice(payment_hash.to_vec(), 1000).await;
         // get invoice subscription before payment to avoid missing it.
         let b_stream = bob.get_invoice_subscription().await;

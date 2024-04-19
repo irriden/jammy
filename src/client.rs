@@ -177,6 +177,8 @@ impl Client {
                         == fedimint_tonic_lnd::lnrpc::invoice::InvoiceState::Accepted as i32
                 {
                     println!("HTLC accepted");
+                } else {
+                    println!("Something else happened: {:?}", inv.state);
                 }
             }
         });
