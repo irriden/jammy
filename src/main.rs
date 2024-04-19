@@ -38,10 +38,12 @@ async fn main() {
 
     let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
     for i in 0..target_peers.len() {
-        //alice.open_channel(String::from(TARGET), 500_000, 0).await;
+        alice
+            .open_channel(String::from(TARGET), 16_000_000, 0)
+            .await;
     }
     for peer in target_peers.iter() {
-        //bob.open_channel(peer.clone(), 500_000, 250_000).await;
+        bob.open_channel(peer.clone(), 16_000_000, 8_000_000).await;
     }
     println!("Please confirm the channels!");
     std::io::stdin().read_line(&mut String::new()).unwrap();
@@ -53,7 +55,16 @@ async fn main() {
     let mut tasks = Vec::new();
     for (channel_id, peer) in alice_channel_ids.iter().zip(target_peers.iter()) {
         let task = async move {
+            let mut i = 1;
             loop {
+                println!("{}", i);
+                let amount = if i % 20 == 0 {
+                    println!("BIG PPAAAAYDAYY!!");
+                    100_000
+                } else {
+                    100_000
+                };
+                i += 1;
                 let mut alice = Client(
                     fedimint_tonic_lnd::connect(
                         format!("https://{}:10009", LND_0_RPCSERVER),
@@ -72,10 +83,9 @@ async fn main() {
                     .await
                     .unwrap(),
                 );
-                let mut endorsed = false;
                 let (preimage, hash) = gen_hash_line();
                 println!("generating invoice...");
-                let invoice = bob.add_hold_invoice(hash.to_vec(), 20_000).await;
+                let invoice = bob.add_hold_invoice(hash.to_vec(), amount).await;
                 println!("sending payment...");
                 alice
                     .send_payment(
@@ -88,7 +98,7 @@ async fn main() {
                 println!("payment sent! settling invoice...");
                 bob.settle_invoice(preimage.to_vec()).await;
                 // prints whether the inbound htlcs to pay that invoice were endorsed
-                endorsed = bob.lookup_invoice(hash.to_vec()).await;
+                let endorsed = bob.lookup_invoice(hash.to_vec()).await;
                 println!("settled invoice: {}", hex::encode(hash));
                 if endorsed {
                     break;
@@ -225,7 +235,7 @@ impl Client {
             .send_payment_v2(fedimint_tonic_lnd::routerrpc::SendPaymentRequest {
                 payment_request,
                 fee_limit_sat: 100_000,
-                timeout_seconds: 100_000,
+                timeout_seconds: 60,
                 endorsed,
                 last_hop_pubkey: last_hop_pubkey.unwrap_or_default(),
                 outgoing_chan_ids: outgoing_chan_ids.unwrap_or_default(),
@@ -237,7 +247,7 @@ impl Client {
         tokio::task::spawn(async move {
             while let Some(payment) = stream.message().await.unwrap() {
                 if payment.status == 3 {
-                    println!("payment failed!");
+                    println!("FFFFFFFFFFFFFFAAAAAAAAAAAAAAAAAAAAAAAIIIIIIIIIIIIIIIILLLLLLLLLLLLLLLLLLLLLLLLL!!!!!!!!!!!!!!");
                 } else if payment.status == 2 {
                     println!("payment success!");
                 }
@@ -249,7 +259,9 @@ impl Client {
         while let Err(_) = self
             .0
             .invoices()
-            .settle_invoice(fedimint_tonic_lnd::invoicesrpc::SettleInvoiceMsg { preimage: preimage.clone() })
+            .settle_invoice(fedimint_tonic_lnd::invoicesrpc::SettleInvoiceMsg {
+                preimage: preimage.clone(),
+            })
             .await
         {}
     }
@@ -275,7 +287,7 @@ impl Client {
                 let htlcs = invoice.htlcs;
                 for htlc in htlcs {
                     if htlc.incoming_endorsed {
-                        println!("HTLC endorsed!!");
+                        println!("HTLC endorsed!!YYYYYYYYYYYYYYYYEEEEEEEEEEEEEEAAAAAAAAAAAAAAAAAAAAAA DOOOOOONNNE");
                     } else {
                         println!("not endorsed");
                     }
