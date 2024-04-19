@@ -49,9 +49,9 @@ async fn main() {
     //     .await
     //     .unwrap();
 
-    // attack::open_to_targets(&mut charlie, vec![TARGET.to_string()])
-    //     .await
-    //     .unwrap();
+    attack::open_to_targets(&mut charlie, vec![front_peer.clone(), back_peer.clone()])
+        .await
+        .unwrap();
 
     // println!("Please confirm the channels!");
     // std::io::stdin().read_line(&mut String::new()).unwrap();
@@ -101,7 +101,7 @@ async fn main() {
         //     .await;
         bob.poll_invoice(payment_hash.to_vec()).await;
 
-        println!("Bob Cancelling {}", i + 1);
+        // println!("Bob Cancelling {}", i + 1);
         bob.cancel_invoice(payment_hash.to_vec()).await;
 
         alice
