@@ -43,12 +43,12 @@ async fn main() {
         .await
         .unwrap();
 
-    attack::open_to_targets(&mut charlie, vec![front_peer.clone()])
+    // The back-attacker (B) opens a channel to the third target
+    attack::open_to_targets(&mut bob, vec![back_peer.clone()])
         .await
         .unwrap();
 
-    // The back-attacker (B) opens a channel to the third target
-    attack::open_to_targets(&mut bob, vec![back_peer.clone()])
+    attack::open_to_targets(&mut charlie, vec![TARGET.to_string()])
         .await
         .unwrap();
 
