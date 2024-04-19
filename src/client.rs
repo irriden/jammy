@@ -6,6 +6,8 @@ use fedimint_tonic_lnd::lnrpc::Payment;
 use fedimint_tonic_lnd::tonic::codec::Streaming;
 use futures::Stream;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
 
 #[allow(dead_code)]
 impl Client {
@@ -202,7 +204,7 @@ impl Client {
                 break;
             } else {
                 println!("Invoice still in state: {:?}", inv.state);
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                sleep(Duration::from_millis(200)).await;
             }
         }
     }
