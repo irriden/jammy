@@ -56,14 +56,16 @@ async fn main() {
     // println!("Please confirm the channels!");
     // std::io::stdin().read_line(&mut String::new()).unwrap();
 
+    // 1. Alice sends payments to Charlie to build reputation
+    println!("100x Alice <-> Charlie payments back and forth");
     for _ in 0..100 {
-        let invoice = charlie.add_invoice(800_000).await;
-        let ac_stream = alice.send_payment(invoice.to_string()).await;
+        let c_invoice = charlie.add_invoice(800_000).await;
+        let ac_stream = alice.send_payment(c_invoice.to_string()).await;
         alice
             .on_payment_result(
                 ac_stream,
                 Arc::new(|_| {
-                    println!("Alice -> Charlie payment success!");
+                    // println!("Alice -> Charlie payment success!");
                 }),
             )
             .await;
@@ -74,7 +76,36 @@ async fn main() {
             .on_payment_result(
                 ca_stream,
                 Arc::new(|_| {
-                    println!("Charlie -> Alice payment success!");
+                    // println!("Charlie -> Alice payment success!");
+                }),
+            )
+            .await;
+    }
+
+    // 2. Alice sends payments to Bob and fails them to destroy Target's reputation for P1<->P2
+    println!("10x Alice -> Bob failed payments");
+    let hash_table = client::gen_hash_table(10);
+    for (i, (preimage, payment_hash)) in hash_table.iter().enumerate() {
+        let invoice = bob.add_hold_invoice(payment_hash.to_vec(), 1000).await;
+        // get invoice subscription before payment to avoid missing it.
+        let b_stream = bob.get_invoice_subscription().await;
+
+        let ab_stream = alice
+            .send_payment(invoice.payment_request.to_string())
+            .await;
+
+        bob.await_invoice_accepted(b_stream, payment_hash.to_vec())
+            .await;
+
+        bob.cancel_invoice(payment_hash.to_vec()).await;
+
+        alice
+            .on_payment_result(
+                ab_stream,
+                Arc::new(|payment| {
+                    if payment.status == 3 {
+                        // println!("Alice -> Bob payment failed!");
+                    }
                 }),
             )
             .await;

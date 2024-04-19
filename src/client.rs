@@ -1,7 +1,10 @@
 pub struct Client(fedimint_tonic_lnd::Client);
 
+use fedimint_tonic_lnd::invoicesrpc::AddHoldInvoiceResp;
+use fedimint_tonic_lnd::lnrpc::invoice::InvoiceState;
 use fedimint_tonic_lnd::lnrpc::Payment;
 use fedimint_tonic_lnd::tonic::codec::Streaming;
+use futures::Stream;
 use std::sync::Arc;
 
 #[allow(dead_code)]
@@ -79,7 +82,11 @@ impl Client {
             .payment_request
     }
 
-    pub async fn add_hold_invoice(&mut self, hash: Vec<u8>, value: i64) -> String {
+    pub async fn add_hold_invoice(
+        &mut self,
+        hash: Vec<u8>,
+        value: i64,
+    ) -> fedimint_tonic_lnd::invoicesrpc::AddHoldInvoiceResp {
         self.0
             .invoices()
             .add_hold_invoice(fedimint_tonic_lnd::invoicesrpc::AddHoldInvoiceRequest {
@@ -90,7 +97,6 @@ impl Client {
             .await
             .unwrap()
             .into_inner()
-            .payment_request
     }
 
     pub async fn send_payment(&mut self, payment_request: String) -> Streaming<Payment> {
@@ -145,9 +151,10 @@ impl Client {
         //println!("{:?}", res);
     }
 
-    async fn subscribe_invoices(&mut self) {
-        let mut invoice_stream = self
-            .0
+    pub async fn get_invoice_subscription(
+        &mut self,
+    ) -> Streaming<fedimint_tonic_lnd::lnrpc::Invoice> {
+        self.0
             .lightning()
             .subscribe_invoices(fedimint_tonic_lnd::lnrpc::InvoiceSubscription {
                 add_index: 0,
@@ -155,7 +162,28 @@ impl Client {
             })
             .await
             .expect("Failed to call subscribe_invoices")
-            .into_inner();
+            .into_inner()
+    }
+
+    pub async fn await_invoice_accepted(
+        &mut self,
+        mut stream: Streaming<fedimint_tonic_lnd::lnrpc::Invoice>,
+        payment_hash: Vec<u8>,
+    ) {
+        tokio::task::spawn(async move {
+            while let Some(inv) = stream.message().await.expect("Failed to receive invoices") {
+                if inv.r_hash == payment_hash
+                    && inv.state
+                        == fedimint_tonic_lnd::lnrpc::invoice::InvoiceState::Accepted as i32
+                {
+                    println!("HTLC accepted");
+                }
+            }
+        });
+    }
+
+    async fn subscribe_invoices(&mut self) {
+        let mut invoice_stream = self.get_invoice_subscription().await;
 
         tokio::task::spawn(async move {
             while let Some(invoice) = invoice_stream
@@ -221,14 +249,14 @@ impl Client {
     }
 
     pub async fn cancel_invoice(&mut self, payment_hash: Vec<u8>) {
-        let _res = self
+        let res = self
             .0
             .invoices()
             .cancel_invoice(fedimint_tonic_lnd::invoicesrpc::CancelInvoiceMsg { payment_hash })
             .await
             .unwrap()
             .into_inner();
-        //println!("{:?}", res);
+        println!("attempt to cancel invoice: {:?}", res);
     }
 }
 
