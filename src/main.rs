@@ -36,16 +36,17 @@ async fn main() {
         .unwrap(),
     );
 
-    let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
+    let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
     for i in 0..target_peers.len() {
         //alice.open_channel(String::from(TARGET), 500_000, 0).await;
     }
     for peer in target_peers.iter() {
         //bob.open_channel(peer.clone(), 500_000, 250_000).await;
     }
-    //println!("Please confirm the channels!");
-    //std::io::stdin().read_line(&mut String::new()).unwrap();
+    println!("Please confirm the channels!");
+    std::io::stdin().read_line(&mut String::new()).unwrap();
 
+    let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
     let alice_channel_ids = alice.list_channel_ids().await;
     assert_eq!(alice_channel_ids.len(), target_peers.len());
 
@@ -85,7 +86,6 @@ async fn main() {
                     )
                     .await;
                 println!("payment sent! settling invoice...");
-                sleep(Duration::from_secs(3)).await;
                 bob.settle_invoice(preimage.to_vec()).await;
                 // prints whether the inbound htlcs to pay that invoice were endorsed
                 endorsed = bob.lookup_invoice(hash.to_vec()).await;
@@ -246,14 +246,12 @@ impl Client {
     }
 
     async fn settle_invoice(&mut self, preimage: Vec<u8>) {
-        let _res = self
+        while let Err(_) = self
             .0
             .invoices()
-            .settle_invoice(fedimint_tonic_lnd::invoicesrpc::SettleInvoiceMsg { preimage })
+            .settle_invoice(fedimint_tonic_lnd::invoicesrpc::SettleInvoiceMsg { preimage: preimage.clone() })
             .await
-            .unwrap()
-            .into_inner();
-        //println!("{:?}", res);
+        {}
     }
 
     async fn subscribe_invoices(&mut self) {
