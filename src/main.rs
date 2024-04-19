@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use tokio::time::{sleep, Duration};
 
 const LND_0_RPCSERVER: &str = env!("LND_0_RPCSERVER");
@@ -35,17 +36,69 @@ async fn main() {
         .unwrap(),
     );
 
+    let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
+    for i in 0..target_peers.len() {
+        //alice.open_channel(String::from(TARGET), 500_000, 0).await;
+    }
+    for peer in target_peers.iter() {
+        //bob.open_channel(peer.clone(), 500_000, 250_000).await;
+    }
+    //println!("Please confirm the channels!");
+    //std::io::stdin().read_line(&mut String::new()).unwrap();
 
-    let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
-    alice
-        .open_channel(target_peers[1].clone(), 500_000, 0)
-        .await;
-    bob.open_channel(target_peers[2].clone(), 500_000, 250_000)
-        .await;
-    println!("Please confirm the channels!");
-    std::io::stdin().read_line(&mut String::new()).unwrap();
+    let alice_channel_ids = alice.list_channel_ids().await;
+    assert_eq!(alice_channel_ids.len(), target_peers.len());
 
-    let hash_table = gen_hash_table(10);
+    let mut tasks = Vec::new();
+    for (channel_id, peer) in alice_channel_ids.iter().zip(target_peers.iter()) {
+        let task = async move {
+            loop {
+                let mut alice = Client(
+                    fedimint_tonic_lnd::connect(
+                        format!("https://{}:10009", LND_0_RPCSERVER),
+                        LND_0_CERT,
+                        LND_0_MACAROON,
+                    )
+                    .await
+                    .unwrap(),
+                );
+                let mut bob = Client(
+                    fedimint_tonic_lnd::connect(
+                        format!("https://{}:10009", LND_1_RPCSERVER),
+                        LND_1_CERT,
+                        LND_1_MACAROON,
+                    )
+                    .await
+                    .unwrap(),
+                );
+                let mut endorsed = false;
+                let (preimage, hash) = gen_hash_line();
+                println!("generating invoice...");
+                let invoice = bob.add_hold_invoice(hash.to_vec(), 20_000).await;
+                println!("sending payment...");
+                alice
+                    .send_payment(
+                        invoice.to_string(),
+                        1,
+                        Some(vec![*channel_id]),
+                        Some(hex::decode(peer).unwrap()),
+                    )
+                    .await;
+                println!("payment sent! settling invoice...");
+                sleep(Duration::from_secs(3)).await;
+                bob.settle_invoice(preimage.to_vec()).await;
+                // prints whether the inbound htlcs to pay that invoice were endorsed
+                endorsed = bob.lookup_invoice(hash.to_vec()).await;
+                println!("settled invoice: {}", hex::encode(hash));
+                if endorsed {
+                    break;
+                }
+            }
+        };
+        tasks.push(task);
+    }
+    let results = join_all(tasks).await;
+    /*
 
     for (i, (preimage, hash)) in hash_table.iter().enumerate() {
         println!("generating invoice...");
@@ -59,6 +112,7 @@ async fn main() {
         bob.lookup_invoice(hash.to_vec()).await;
         println!("settled invoice: {}, {}", i, hex::encode(hash));
     }
+    */
 }
 
 struct Client(fedimint_tonic_lnd::Client);
@@ -75,7 +129,23 @@ impl Client {
             .identity_pubkey
     }
 
+    async fn list_channel_ids(&mut self) -> Vec<u64> {
+        self.0
+            .lightning()
+            .list_channels(fedimint_tonic_lnd::lnrpc::ListChannelsRequest {
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .channels
+            .iter()
+            .map(|channel| channel.chan_id)
+            .collect()
+    }
+
     async fn graph_get_node_peers(&mut self, node_pubkey: String) -> Vec<String> {
+        use std::collections::HashSet;
         let channels = self
             .0
             .lightning()
@@ -87,7 +157,7 @@ impl Client {
             .unwrap()
             .into_inner()
             .channels;
-        channels
+        let mut peers: Vec<_> = channels
             .iter()
             .map(|channel| {
                 if channel.node1_pub == node_pubkey {
@@ -96,7 +166,10 @@ impl Client {
                     channel.node1_pub.clone()
                 }
             })
-            .collect()
+            .collect();
+        let set: HashSet<_> = peers.drain(..).collect();
+        peers.extend(set.into_iter());
+        peers
     }
 
     async fn open_channel(
@@ -139,7 +212,13 @@ impl Client {
             .payment_request
     }
 
-    async fn send_payment(&mut self, payment_request: String) {
+    async fn send_payment(
+        &mut self,
+        payment_request: String,
+        endorsed: i32,
+        outgoing_chan_ids: Option<Vec<u64>>,
+        last_hop_pubkey: Option<Vec<u8>>,
+    ) {
         let mut stream = self
             .0
             .router()
@@ -147,7 +226,9 @@ impl Client {
                 payment_request,
                 fee_limit_sat: 100_000,
                 timeout_seconds: 100_000,
-                endorsed: 1i32,
+                endorsed,
+                last_hop_pubkey: last_hop_pubkey.unwrap_or_default(),
+                outgoing_chan_ids: outgoing_chan_ids.unwrap_or_default(),
                 ..Default::default()
             })
             .await
@@ -205,7 +286,7 @@ impl Client {
         });
     }
 
-    async fn lookup_invoice(&mut self, r_hash: Vec<u8>) {
+    async fn lookup_invoice(&mut self, r_hash: Vec<u8>) -> bool {
         let htlcs = self
             .0
             .lightning()
@@ -217,13 +298,14 @@ impl Client {
             .unwrap()
             .into_inner()
             .htlcs;
-        for htlc in htlcs {
+        for htlc in htlcs.iter() {
             if htlc.incoming_endorsed {
                 println!("HTLC endorsed!!");
             } else {
                 println!("not endorsed");
             }
         }
+        htlcs.iter().all(|htlc| htlc.incoming_endorsed)
     }
 
     async fn connect_peer(&mut self, pubkey: String, host: String) {
@@ -275,4 +357,15 @@ fn gen_hash_table(n: usize) -> Vec<([u8; 32], [u8; 32])> {
         hash_table.push((preimage, hash.to_byte_array()));
     }
     hash_table
+}
+
+fn gen_hash_line() -> ([u8; 32], [u8; 32]) {
+    use bitcoin_hashes::sha256;
+    use bitcoin_hashes::Hash;
+    use rand::{thread_rng, Rng};
+    let mut rng = thread_rng();
+    let mut preimage = [0u8; 32];
+    rng.fill(&mut preimage[..]);
+    let hash = sha256::Hash::hash(&preimage);
+    (preimage, hash.to_byte_array())
 }
