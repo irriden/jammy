@@ -97,8 +97,9 @@ async fn main() {
             .await;
 
         println!("Bob waiting for invoice accept {}", i + 1);
-        bob.await_invoice_accepted(b_stream, payment_hash.to_vec())
-            .await;
+        // bob.await_invoice_accepted(b_stream, payment_hash.to_vec())
+        //     .await;
+        bob.poll_invoice(payment_hash.to_vec()).await;
 
         println!("Bob Cancelling {}", i + 1);
         bob.cancel_invoice(payment_hash.to_vec()).await;

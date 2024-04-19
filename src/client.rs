@@ -184,6 +184,28 @@ impl Client {
         });
     }
 
+    pub async fn poll_invoice(&mut self, payment_hash: Vec<u8>) {
+        loop {
+            let inv = self
+                .0
+                .lightning()
+                .lookup_invoice(fedimint_tonic_lnd::lnrpc::PaymentHash {
+                    r_hash: payment_hash.clone(),
+                    ..Default::default()
+                })
+                .await
+                .unwrap()
+                .into_inner();
+
+            if inv.state == InvoiceState::Accepted as i32 {
+                println!("Invoice accepted");
+                break;
+            } else {
+                println!("Invoice still in state: {:?}", inv.state);
+            }
+        }
+    }
+
     async fn subscribe_invoices(&mut self) {
         let mut invoice_stream = self.get_invoice_subscription().await;
 
