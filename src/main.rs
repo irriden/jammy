@@ -39,23 +39,37 @@ async fn main() {
     let front_peer = &target_peers[0];
     let back_peer = &target_peers[1];
 
-    // // have two front-attackers (A & C) open channels to the target
-    // attack::open_to_targets(&mut alice, vec![front_peer.clone()])
-    //     .await
-    //     .unwrap();
+    let arg = std::env::args().nth(1);
+    match arg {
+        Some(a) => {
+            if a == "oc" {
+                println!("Opening channels to peers and target");
+                // have two front-attackers (A & C) open channels to the target
+                attack::open_to_targets(&mut alice, vec![front_peer.clone()])
+                    .await
+                    .unwrap();
 
-    // // The back-attacker (B) opens a channel to the third target
-    // attack::open_to_targets(&mut bob, vec![back_peer.clone()])
-    //     .await
-    //     .unwrap();
+                // The back-attacker (B) opens a channel to the third target
+                attack::open_to_targets(&mut bob, vec![back_peer.clone()])
+                    .await
+                    .unwrap();
 
-    // // Charlie opens channels to both peers and the target (to allow us to see the reputations of the peers)
-    // attack::open_to_targets(&mut charlie, vec![TARGET.to_string(), front_peer.clone(), back_peer.clone()])
-    //     .await
-    //     .unwrap();
+                // Charlie opens channels to both peers and the target (to allow us to see the reputations of the peers)
+                attack::open_to_targets(
+                    &mut charlie,
+                    vec![TARGET.to_string(), front_peer.clone(), back_peer.clone()],
+                )
+                .await
+                .unwrap();
 
-    // println!("Please confirm the channels!");
-    // std::io::stdin().read_line(&mut String::new()).unwrap();
+                println!("Please confirm the channels!");
+                std::io::stdin().read_line(&mut String::new()).unwrap();
+            }
+        }
+        None => {
+            println!("Skipping channel opening");
+        }
+    }
 
     // 1. Alice sends payments to Charlie via front-peer to build reputation
     let charlie_target_peer_channel = &charlie.get_channels_for_peer(TARGET.to_string()).await[0];
