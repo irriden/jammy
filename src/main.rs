@@ -157,10 +157,9 @@ async fn main() {
     // 3. Charlie sends payment to route[front-peer, target, back-peer] to check reputation
     let charlie_front_peer_channel = &charlie.get_channels_for_peer(front_peer.clone()).await[0];
     println!("Charlie -> [front-peer, target, back-peer] payment");
+    bob.subscribe_invoices().await;
     for _ in 0..10 {
         let b_invoice = bob.add_invoice(50_000).await;
-
-        bob.subscribe_invoices().await;
 
         let c_stream = charlie
             .send_payment(
