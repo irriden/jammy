@@ -37,11 +37,9 @@ async fn main() {
     );
 
     let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
-    for i in 0..target_peers.len() {
-        alice
-            .open_channel(String::from(TARGET), 16_000_000, 0)
-            .await;
-    }
+    alice
+        .open_channel(String::from(TARGET), 16_000_000, 0)
+        .await;
     for peer in target_peers.iter() {
         bob.open_channel(peer.clone(), 16_000_000, 8_000_000).await;
     }
@@ -51,6 +49,65 @@ async fn main() {
     let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
     let alice_channel_ids = alice.list_channel_ids().await;
     assert_eq!(alice_channel_ids.len(), target_peers.len());
+
+    let mut tasks = Vec::new();
+    for (channel_id, peer) in alice_channel_ids.iter().zip(target_peers.iter()) {
+        let task = async move {
+            let mut i = 1;
+            loop {
+                println!("{}", i);
+                let amount = if i % 20 == 0 {
+                    println!("BIG PPAAAAYDAYY!!");
+                    100_000
+                } else {
+                    100_000
+                };
+                i += 1;
+                let mut alice = Client(
+                    fedimint_tonic_lnd::connect(
+                        format!("https://{}:10009", LND_0_RPCSERVER),
+                        LND_0_CERT,
+                        LND_0_MACAROON,
+                    )
+                    .await
+                    .unwrap(),
+                );
+                let mut bob = Client(
+                    fedimint_tonic_lnd::connect(
+                        format!("https://{}:10009", LND_1_RPCSERVER),
+                        LND_1_CERT,
+                        LND_1_MACAROON,
+                    )
+                    .await
+                    .unwrap(),
+                );
+                let (preimage, hash) = gen_hash_line();
+                let invoice = bob.add_hold_invoice(hash.to_vec(), amount).await;
+                println!("sending payment...");
+                alice
+                    .send_payment(
+                        invoice.to_string(),
+                        1,
+                        Some(vec![*channel_id]),
+                        Some(hex::decode(peer).unwrap()),
+                    )
+                    .await;
+                println!("payment sent! settling invoice...");
+                bob.settle_invoice(preimage.to_vec()).await;
+                // prints whether the inbound htlcs to pay that invoice were endorsed
+                let endorsed = bob.lookup_invoice(hash.to_vec()).await;
+                println!("settled invoice: {}", hex::encode(hash));
+                if endorsed {
+                    break;
+                }
+            }
+        };
+        tasks.push(task);
+    }
+
+    let results = join_all(tasks).await;
+    println!("all paths endorsed!");
+    sleep(Duration::from_secs(5)).await;
 
     let mut tasks = Vec::new();
     for (channel_id, peer) in alice_channel_ids.iter().zip(target_peers.iter()) {
@@ -96,33 +153,19 @@ async fn main() {
                     )
                     .await;
                 println!("payment sent! settling invoice...");
-                bob.settle_invoice(preimage.to_vec()).await;
+                sleep(Duration::from_secs(120)).await;
                 // prints whether the inbound htlcs to pay that invoice were endorsed
                 let endorsed = bob.lookup_invoice(hash.to_vec()).await;
+                bob.cancel_invoice(hash.to_vec()).await;
                 println!("settled invoice: {}", hex::encode(hash));
                 if endorsed {
-                    break;
+                    //break;
                 }
             }
         };
         tasks.push(task);
     }
     let results = join_all(tasks).await;
-    /*
-
-    for (i, (preimage, hash)) in hash_table.iter().enumerate() {
-        println!("generating invoice...");
-        let invoice = bob.add_hold_invoice(hash.to_vec(), 1000).await;
-        println!("sending payment...");
-        alice.send_payment(invoice.to_string()).await;
-        println!("payment sent! settling invoice...");
-        sleep(Duration::from_secs(3)).await;
-        bob.settle_invoice(preimage.to_vec()).await;
-        // prints whether the inbound htlcs to pay that invoice were endorsed
-        bob.lookup_invoice(hash.to_vec()).await;
-        println!("settled invoice: {}, {}", i, hex::encode(hash));
-    }
-    */
 }
 
 struct Client(fedimint_tonic_lnd::Client);
@@ -247,7 +290,7 @@ impl Client {
         tokio::task::spawn(async move {
             while let Some(payment) = stream.message().await.unwrap() {
                 if payment.status == 3 {
-                    println!("FFFFFFFFFFFFFFAAAAAAAAAAAAAAAAAAAAAAAIIIIIIIIIIIIIIIILLLLLLLLLLLLLLLLLLLLLLLLL!!!!!!!!!!!!!!");
+                    println!("payment failed");
                 } else if payment.status == 2 {
                     println!("payment success!");
                 }
