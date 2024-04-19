@@ -21,6 +21,24 @@ impl Client {
             .identity_pubkey
     }
 
+    pub async fn get_channels_for_peer(
+        &mut self,
+        pubkey: String,
+    ) -> Vec<fedimint_tonic_lnd::lnrpc::Channel> {
+        self.0
+            .lightning()
+            .list_channels(fedimint_tonic_lnd::lnrpc::ListChannelsRequest {
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .channels
+            .into_iter()
+            .filter(|channel| channel.remote_pubkey == pubkey)
+            .collect()
+    }
+
     pub async fn graph_get_node_peers(&mut self, node_pubkey: String) -> Vec<String> {
         let channels = self
             .0
@@ -101,14 +119,22 @@ impl Client {
             .into_inner()
     }
 
-    pub async fn send_payment(&mut self, payment_request: String) -> Streaming<Payment> {
+    pub async fn send_payment(
+        &mut self,
+        payment_request: String,
+        endorsed: i32,
+        outgoing_chan_ids: Option<Vec<u64>>,
+        last_hop_pubkey: Option<Vec<u8>>,
+    ) -> Streaming<Payment> {
         self.0
             .router()
             .send_payment_v2(fedimint_tonic_lnd::routerrpc::SendPaymentRequest {
                 payment_request,
                 fee_limit_sat: 100_000,
-                timeout_seconds: 100_000,
-                endorsed: 1i32,
+                timeout_seconds: 60,
+                endorsed,
+                last_hop_pubkey: last_hop_pubkey.unwrap_or_default(),
+                outgoing_chan_ids: outgoing_chan_ids.unwrap_or_default(),
                 ..Default::default()
             })
             .await
@@ -209,8 +235,9 @@ impl Client {
         }
     }
 
-    async fn subscribe_invoices(&mut self) {
+    pub async fn subscribe_invoices(&mut self) {
         let mut invoice_stream = self.get_invoice_subscription().await;
+        println!("got invoice subscription");
 
         tokio::task::spawn(async move {
             while let Some(invoice) = invoice_stream
@@ -311,4 +338,8 @@ pub async fn new_client(
         fedimint_tonic_lnd::connect(format!("https://{}:10009", rpcserver), cert, macaroon).await?,
     );
     Ok(client)
+}
+
+pub fn decode_hex(s: &str) -> Vec<u8> {
+    hex::decode(s).unwrap()
 }
