@@ -3,8 +3,6 @@ use tokio::time::{sleep, Duration};
 mod attack;
 mod client;
 
-use client::Client;
-
 // Alice
 const LND_0_RPCSERVER: &str = env!("LND_0_RPCSERVER");
 const LND_0_CERT: &str = env!("LND_0_CERT");
