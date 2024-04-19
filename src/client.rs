@@ -229,7 +229,7 @@ impl Client {
                 println!("Invoice accepted");
                 break;
             } else {
-                println!("Invoice still in state: {:?}", inv.state);
+                // println!("Invoice still in state: {:?}", inv.state);
                 sleep(Duration::from_millis(200)).await;
             }
         }

@@ -155,11 +155,12 @@ async fn main() {
     }
 
     // 3. Charlie sends payment to route[front-peer, target, back-peer, Bob] to check reputation
+    let test_payments = 20;
     let charlie_front_peer_channel = &charlie.get_channels_for_peer(front_peer.clone()).await[0];
     println!("Charlie -> [front-peer, target, back-peer] payment");
-    let hash_table_2 = client::gen_hash_table(10);
+    let hash_table_2 = client::gen_hash_table(test_payments);
     for (i, (preimage, payment_hash)) in hash_table_2.iter().enumerate() {
-        let b_invoice = bob.add_hold_invoice(payment_hash.to_vec(), 50_000).await;
+        let b_invoice = bob.add_hold_invoice(payment_hash.to_vec(), 800_000).await;
 
         let c_stream = charlie
             .send_payment(
@@ -175,5 +176,37 @@ async fn main() {
         bob.lookup_invoice(payment_hash.to_vec()).await;
 
         bob.settle_invoice(preimage.to_vec()).await;
+
+        // wait for the payment to be settled
+        charlie
+            .on_payment_result(
+                c_stream,
+                Arc::new(|payment| {
+                    if payment.status == 1 {
+                        // println!("Charlie -> [front-peer, target, back-peer] payment success!");
+                    }
+                }),
+            )
+            .await;
+
+        // return the money to preserve liquidity
+        let c_invoice = charlie.add_invoice(800_000).await;
+        let b_stream = bob
+            .send_payment(
+                c_invoice.to_string(),
+                1,
+                None,
+                Some(client::decode_hex(&front_peer)),
+            )
+            .await;
+
+        bob.on_payment_result(
+            b_stream,
+            Arc::new(|payment| {
+                if payment.status == 1 {
+                    // println!("Bob -> Charlie payment success!");
+                }
+            }),
+        );
     }
 }
