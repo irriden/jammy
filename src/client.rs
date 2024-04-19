@@ -1,5 +1,9 @@
 pub struct Client(fedimint_tonic_lnd::Client);
 
+use fedimint_tonic_lnd::lnrpc::Payment;
+use fedimint_tonic_lnd::tonic::codec::Streaming;
+use std::sync::Arc;
+
 #[allow(dead_code)]
 impl Client {
     pub async fn get_pubkey(&mut self) -> String {
@@ -62,6 +66,19 @@ impl Client {
         println!("{}", s);
     }
 
+    pub async fn add_invoice(&mut self, value: i64) -> String {
+        self.0
+            .lightning()
+            .add_invoice(fedimint_tonic_lnd::lnrpc::Invoice {
+                value,
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .payment_request
+    }
+
     pub async fn add_hold_invoice(&mut self, hash: Vec<u8>, value: i64) -> String {
         self.0
             .invoices()
@@ -76,9 +93,8 @@ impl Client {
             .payment_request
     }
 
-    pub async fn send_payment(&mut self, payment_request: String) {
-        let mut stream = self
-            .0
+    pub async fn send_payment(&mut self, payment_request: String) -> Streaming<Payment> {
+        self.0
             .router()
             .send_payment_v2(fedimint_tonic_lnd::routerrpc::SendPaymentRequest {
                 payment_request,
@@ -89,16 +105,33 @@ impl Client {
             })
             .await
             .unwrap()
-            .into_inner();
+            .into_inner()
+    }
+
+    pub async fn on_payment_result(
+        &mut self,
+        mut stream: Streaming<Payment>,
+        on_success: Arc<dyn Fn(Payment) + Send + Sync>,
+    ) {
         tokio::task::spawn(async move {
             while let Some(payment) = stream.message().await.unwrap() {
+                on_success(payment);
+            }
+        });
+    }
+
+    pub async fn print_payment_result(&mut self, stream: Streaming<Payment>) {
+        self.on_payment_result(
+            stream,
+            Arc::new(|payment| {
                 if payment.status == 3 {
                     println!("payment failed!");
                 } else if payment.status == 2 {
                     println!("payment success!");
                 }
-            }
-        });
+            }),
+        )
+        .await;
     }
 
     pub async fn settle_invoice(&mut self, preimage: Vec<u8>) {

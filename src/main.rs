@@ -2,6 +2,7 @@ use tokio::time::{sleep, Duration};
 
 mod attack;
 mod client;
+use std::sync::Arc;
 
 // Alice
 const LND_0_RPCSERVER: &str = env!("LND_0_RPCSERVER");
@@ -55,18 +56,44 @@ async fn main() {
     println!("Please confirm the channels!");
     std::io::stdin().read_line(&mut String::new()).unwrap();
 
-    let hash_table = client::gen_hash_table(10);
+    // let hash_table = client::gen_hash_table(10);
 
-    for (i, (preimage, hash)) in hash_table.iter().enumerate() {
-        println!("generating invoice...");
-        let invoice = bob.add_hold_invoice(hash.to_vec(), 1000).await;
-        println!("sending payment...");
-        alice.send_payment(invoice.to_string()).await;
-        println!("payment sent! settling invoice...");
-        sleep(Duration::from_secs(3)).await;
-        bob.settle_invoice(preimage.to_vec()).await;
-        // prints whether the inbound htlcs to pay that invoice were endorsed
-        bob.lookup_invoice(hash.to_vec()).await;
-        println!("settled invoice: {}, {}", i, hex::encode(hash));
+    // // 1. Alice pays Charlie successfully several times
+    // for (i, (preimage, hash)) in hash_table.iter().enumerate() {
+    //     println!("generating invoice...");
+    //     let invoice = charlie.add_hold_invoice(hash.to_vec(), 1000).await;
+    //     println!("sending payment...");
+    //     alice.send_payment(invoice.to_string()).await;
+    //     println!("payment sent! settling invoice...");
+
+    //     charlie.lookup_invoice(hash.to_vec()).await;
+    //     charlie.settle_invoice(preimage.to_vec()).await;
+    //     // prints whether the inbound htlcs to pay that invoice were endorsed
+    //     bob.lookup_invoice(hash.to_vec()).await;
+    //     println!("settled invoice: {}, {}", i, hex::encode(hash));
+    // }
+
+    for _ in 0..100 {
+        let invoice = charlie.add_invoice(800_000).await;
+        let ac_stream = alice.send_payment(invoice.to_string()).await;
+        alice
+            .on_payment_result(
+                ac_stream,
+                Arc::new(|_| {
+                    println!("Alice -> Charlie payment success!");
+                }),
+            )
+            .await;
+
+        let a_invoice = alice.add_invoice(800_000).await;
+        let ca_stream = charlie.send_payment(a_invoice.to_string()).await;
+        charlie
+            .on_payment_result(
+                ca_stream,
+                Arc::new(|_| {
+                    println!("Charlie -> Alice payment success!");
+                }),
+            )
+            .await;
     }
 }
