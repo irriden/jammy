@@ -36,7 +36,6 @@ async fn main() {
         .unwrap(),
     );
 
-    /*
     let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
     alice
         .open_channel(String::from(TARGET), 16_000_000, 0)
@@ -46,7 +45,6 @@ async fn main() {
     }
     println!("Please confirm the channels!");
     std::io::stdin().read_line(&mut String::new()).unwrap();
-    */
 
     let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
 
