@@ -207,6 +207,7 @@ async fn main() {
                     // println!("Bob -> Charlie payment success!");
                 }
             }),
-        );
+        )
+        .await;
     }
 }
