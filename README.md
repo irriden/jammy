@@ -1,9 +1,12 @@
 
 ### Approach
 In our approach, we decided to 
-- Gain endorsement on our transactions
-- Send payments to then cancel before the 90 seconds to not lose our endorsement
-- Raised the payment to the maximum amount we could before getting a not enough liquidity error
+- Acquire reputation to get our htlcs endorsed across the target's channels.
+- Probe the total outbound liquidity on each of the target's channels with endorsed htlcs.
+- Execute a fast jamming attack - where the size of each htlc is the total outbound liquidity on the channel,
+and each htlc is never held for more than 90 seconds.
+- During the attack the htlcs remain endorsed, and repeatedly lock up the full amount of the outbound liquidty on the channel.
+- The target is unable to route any other payments.
 
 ### Setup
 In our setup, we had two nodes
@@ -23,3 +26,4 @@ In this attack, the estimated cost will be </br>
 3). The upfront fees since we will be canceling the transaction and sending another one after less than 90 seconds </br>
 
 we used the idea that we don't lose reputation if we resolve before the `resolution_period` in this attack
+as well as the fact that endorsed htlcs have access to _all_ of the liquidity of a channel
