@@ -5,7 +5,7 @@ In our approach, we decided to
 - Probe the total outbound liquidity on each of the target's channels with endorsed htlcs.
 - Execute a fast jamming attack - where the size of each htlc is the total outbound liquidity on the channel,
 and each htlc is never held for more than 90 seconds.
-- During the attack the htlcs remain endorsed, and repeatedly lock up the full amount of the outbound liquidty on the channel.
+- During the attack the htlcs remain endorsed, and repeatedly lock up the full amount of the outbound liquidity on the channel.
 - The target is unable to route any other payments.
 
 ### Setup
