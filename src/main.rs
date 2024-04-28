@@ -113,14 +113,14 @@ async fn main() {
     println!("all paths endorsed!");
     sleep(Duration::from_secs(5)).await;
 
-    // LOCK UP ALL THE LIQUIDITY IN THE ENDORSED BUCKET
+    // LOCK UP ALL THE OUTBOUND LIQUIDITY ON ALL THE TARGET'S CHANNELS
     // Probe the amount of outbound liquidity that the target has in the channel with
     // each of its peers - taking care to never lose the endorsement acquired above
     // Once the amount of outbound liquidy has been found for each channel,
     // repeatedly send a htlc of that size across the channel,
     // hold it for 80 seconds, cancel it, and immediately send it again.
     // Result:
-    // Htlcs never lose their endorsement, but repeatedly lock up
+    // Htlcs never lose their endorsement, and repeatedly lock up
     // all the outbound liquidity in that channel.
     // Hence the target cannot route any other payments.
 
