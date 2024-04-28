@@ -26,3 +26,4 @@ In this attack, the estimated cost will be </br>
 3). The upfront fees since we will be canceling the transaction and sending another one after less than 90 seconds </br>
 
 we used the idea that we don't lose reputation if we resolve before the `resolution_period` in this attack
+as well as the fact that endorsed htlcs have access to _all_ of the liquidity of a channel
