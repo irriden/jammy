@@ -36,6 +36,11 @@ async fn main() {
         .unwrap(),
     );
 
+    // OPEN CHANNELS
+    // alice opens 1 channel to the target
+    // bob opens 1 channel to each of the target's peers,
+    // and pushes sats over to acquire inbound
+
     let target_peers = alice.graph_get_node_peers(String::from(TARGET)).await;
     alice
         .open_channel(String::from(TARGET), 16_000_000, 0)
@@ -48,6 +53,11 @@ async fn main() {
     std::io::stdin().read_line(&mut String::new()).unwrap();
 
     let target_peers = alice.graph_get_node_peers(bob.get_pubkey().await).await;
+
+    // ACQUIRE ENDORSEMENTS
+    // Spawn one task for each of the target's peers, and send payments via
+    // alice -> target -> peer -> bob
+    // until the payments are endorsed
 
     let mut tasks = Vec::new();
     for peer in target_peers.iter() {
@@ -102,6 +112,17 @@ async fn main() {
     let results = join_all(tasks).await;
     println!("all paths endorsed!");
     sleep(Duration::from_secs(5)).await;
+
+    // LOCK UP ALL THE LIQUIDITY IN THE ENDORSED BUCKET
+    // Probe the amount of outbound liquidity that the target has in the channel with
+    // each of its peers - taking care to never lose the endorsement acquired above
+    // Once the amount of outbound liquidy has been found for each channel,
+    // repeatedly send a htlc of that size across the channel,
+    // hold it for 80 seconds, cancel it, and immediately send it again.
+    // Result:
+    // Htlcs never lose their endorsement, but repeatedly lock up
+    // all the outbound liquidity in that channel.
+    // Hence the target cannot route any other payments.
 
     let mut tasks = Vec::new();
     for peer in target_peers.iter() {
